@@ -179,3 +179,204 @@ class UserTeamListSerializer(serializers.ModelSerializer):
             'captain_name', 'vice_captain_name',
             'total_points', 'is_locked', 'created_at',
         ]
+
+
+
+
+
+from .models import Contest, ContestEntry
+
+
+class PrizeDistributionSerializer(serializers.Serializer):
+    rank_from = serializers.IntegerField(min_value=1)
+    rank_to = serializers.IntegerField(min_value=1)
+    prize = serializers.IntegerField(min_value=0)  # in paise
+
+
+class ContestListSerializer(serializers.ModelSerializer):
+    """Compact contest info for listing"""
+    entry_fee_inr = serializers.SerializerMethodField()
+    prize_pool_inr = serializers.SerializerMethodField()
+    spots_left = serializers.SerializerMethodField()
+    is_full = serializers.SerializerMethodField()
+    match_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Contest
+        fields = [
+            'id', 'name', 'contest_type', 'status',
+            'entry_fee_inr', 'prize_pool_inr',
+            'max_entries', 'current_entries',
+            'spots_left', 'is_full',
+            'max_teams_per_user', 'match_name',
+        ]
+
+    def get_entry_fee_inr(self, obj):
+        return round(obj.entry_fee / 100, 2)
+
+    def get_prize_pool_inr(self, obj):
+        return round(obj.total_prize_pool / 100, 2)
+
+    def get_spots_left(self, obj):
+        return max(0, obj.max_entries - obj.current_entries)
+
+    def get_is_full(self, obj):
+        return obj.current_entries >= obj.max_entries
+
+    def get_match_name(self, obj):
+        return f"{obj.match.team_a.short_name} vs {obj.match.team_b.short_name}"
+
+
+class ContestDetailSerializer(serializers.ModelSerializer):
+    """Full contest detail including prize breakdown"""
+    entry_fee_inr = serializers.SerializerMethodField()
+    prize_pool_inr = serializers.SerializerMethodField()
+    spots_left = serializers.SerializerMethodField()
+    match_name = serializers.SerializerMethodField()
+    prize_distribution_inr = serializers.SerializerMethodField()
+    user_entries = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Contest
+        fields = [
+            'id', 'name', 'contest_type', 'status',
+            'entry_fee_inr', 'prize_pool_inr',
+            'max_entries', 'current_entries', 'min_entries',
+            'spots_left', 'max_teams_per_user',
+            'match_name', 'prize_distribution_inr',
+            'user_entries',
+        ]
+
+    def get_entry_fee_inr(self, obj):
+        return round(obj.entry_fee / 100, 2)
+
+    def get_prize_pool_inr(self, obj):
+        return round(obj.total_prize_pool / 100, 2)
+
+    def get_spots_left(self, obj):
+        return max(0, obj.max_entries - obj.current_entries)
+
+    def get_match_name(self, obj):
+        return f"{obj.match.team_a.short_name} vs {obj.match.team_b.short_name}"
+
+    def get_prize_distribution_inr(self, obj):
+        """Convert paise to INR in prize distribution"""
+        result = []
+        for tier in obj.prize_distribution:
+            result.append({
+                'rank_from': tier['rank_from'],
+                'rank_to': tier['rank_to'],
+                'prize_inr': round(tier['prize'] / 100, 2),
+            })
+        return result
+
+    def get_user_entries(self, obj):
+        """How many teams this user entered in this contest"""
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return 0
+        return obj.entries.filter(user=request.user).count()
+
+
+class JoinContestSerializer(serializers.Serializer):
+    """Validate joining a contest"""
+    team_id = serializers.UUIDField()
+
+    def validate(self, data):
+        request = self.context['request']
+        contest = self.context['contest']
+        user = request.user
+        team_id = data['team_id']
+
+        # Contest must be upcoming
+        if contest.status != 'upcoming':
+            raise serializers.ValidationError(
+                {'contest': 'This contest is not open for entries.'}
+            )
+
+        # Contest must not be full
+        if contest.is_full():
+            raise serializers.ValidationError(
+                {'contest': 'This contest is full.'}
+            )
+
+        # Team must belong to user and be for this match
+        from .models import UserTeam
+        try:
+            team = UserTeam.objects.get(
+                id=team_id,
+                user=user,
+                match=contest.match
+            )
+        except UserTeam.DoesNotExist:
+            raise serializers.ValidationError(
+                {'team_id': 'Team not found or does not belong to this match.'}
+            )
+
+        # Team must not be locked (it will be locked at match start)
+        # Check same team not already in this contest
+        if ContestEntry.objects.filter(
+            contest=contest,
+            team=team
+        ).exists():
+            raise serializers.ValidationError(
+                {'team_id': 'This team is already entered in this contest.'}
+            )
+
+        # Check max teams per user per contest
+        user_entries_count = ContestEntry.objects.filter(
+            contest=contest,
+            user=user
+        ).count()
+        if user_entries_count >= contest.max_teams_per_user:
+            raise serializers.ValidationError(
+                {'team_id': f'You can enter maximum {contest.max_teams_per_user} teams in this contest.'}
+            )
+
+        # Check user has enough wallet balance for paid contests
+        if contest.entry_fee > 0:
+            try:
+                wallet = user.wallet
+            except Exception:
+                raise serializers.ValidationError(
+                    {'wallet': 'Wallet not found. Please contact support.'}
+                )
+
+            total_balance = wallet.deposit_balance + wallet.winnings_balance + wallet.bonus_balance
+            if total_balance < contest.entry_fee:
+                raise serializers.ValidationError(
+                    {'wallet': f'Insufficient balance. Need ₹{contest.entry_fee/100:.2f}, '
+                               f'you have ₹{total_balance/100:.2f}.'}
+                )
+
+        data['team'] = team
+        data['contest'] = contest
+        return data
+
+
+class ContestEntrySerializer(serializers.ModelSerializer):
+    """A user's entry in a contest"""
+    contest_name = serializers.CharField(source='contest.name', read_only=True)
+    team_name = serializers.CharField(source='team.name', read_only=True)
+    prize_won_inr = serializers.SerializerMethodField()
+    entry_fee_inr = serializers.SerializerMethodField()
+    match_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ContestEntry
+        fields = [
+            'id', 'contest_name', 'team_name',
+            'match_name', 'rank',
+            'entry_fee_inr', 'prize_won_inr',
+            'is_winner', 'joined_at',
+        ]
+
+    def get_prize_won_inr(self, obj):
+        return round(obj.prize_won / 100, 2)
+
+    def get_entry_fee_inr(self, obj):
+        return round(obj.entry_fee_paid / 100, 2)
+
+    def get_match_name(self, obj):
+        m = obj.contest.match
+        return f"{m.team_a.short_name} vs {m.team_b.short_name}"
