@@ -191,3 +191,5 @@ TOP11_TDS_RATE = 0.30            # 30% TDS
 SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = 'DENY'
 SECURE_CONTENT_TYPE_NOSNIFF = True
+# Site URL (used in Cashfree webhook notify_url)
+SITE_URL = config('SITE_URL', default='http://127.0.0.1:8000')
