@@ -3,6 +3,10 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+
+admin.site.site_header = 'TOP11 Admin'
+admin.site.site_title = 'TOP11 Admin Portal'
+admin.site.index_title = 'Platform Management'
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('accounts.urls')),
@@ -10,6 +14,7 @@ urlpatterns = [
     path('api/contests/', include('contests.urls')),
     path('api/payments/', include('payments.urls')),
     path('api/scoring/', include('scoring.urls')),
+    path('api/admin/', include('accounts.admin_urls')),
 ]
 
 if settings.DEBUG:

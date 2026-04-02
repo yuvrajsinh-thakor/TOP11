@@ -193,3 +193,8 @@ X_FRAME_OPTIONS = 'DENY'
 SECURE_CONTENT_TYPE_NOSNIFF = True
 # Site URL (used in Cashfree webhook notify_url)
 SITE_URL = config('SITE_URL', default='http://127.0.0.1:8000')
+
+# Admin panel branding
+ADMIN_SITE_HEADER = 'TOP11 Admin'
+ADMIN_SITE_TITLE = 'TOP11 Admin Portal'
+ADMIN_INDEX_TITLE = 'Welcome to TOP11 Admin'
