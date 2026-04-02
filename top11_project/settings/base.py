@@ -147,6 +147,7 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+    'http://127.0.0.1:5500',
     'http://localhost:8080',
 ]
 CORS_ALLOW_CREDENTIALS = True
@@ -198,3 +199,15 @@ SITE_URL = config('SITE_URL', default='http://127.0.0.1:8000')
 ADMIN_SITE_HEADER = 'TOP11 Admin'
 ADMIN_SITE_TITLE = 'TOP11 Admin Portal'
 ADMIN_INDEX_TITLE = 'Welcome to TOP11 Admin'
+
+# WebSocket allowed origins
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:8080',
+    'http://127.0.0.1:5500'
+    'http://127.0.0.1:8080',
+]
+
+# Allow all in development
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')

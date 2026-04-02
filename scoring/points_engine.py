@@ -6,6 +6,13 @@ from matches.models import Match
 from payments.models import Transaction
 from accounts.models import Wallet
 from django.conf import settings
+# Add at the top of scoring/points_engine.py
+from scoring.broadcast import (
+    broadcast_score_update,
+    broadcast_all_scores,
+    broadcast_leaderboard_update,
+    broadcast_match_status,
+)
 
 
 def get_points_rules():
@@ -148,6 +155,19 @@ def save_player_score(match, player, stats, rules):
             'points_breakdown': breakdown,
         }
     )
+
+
+    # Broadcast to all WebSocket clients watching this match
+    try:
+        broadcast_score_update(
+            match_id=str(match.id),
+            player_id=str(player.id),
+            player_name=player.name,
+            total_points=float(total_points),
+            breakdown=breakdown,
+        )
+    except Exception:
+        pass  # Never let broadcast failure break score saving
     return score
 
 
@@ -221,6 +241,24 @@ def rebuild_leaderboard(contest):
         ))
 
     Leaderboard.objects.bulk_create(leaderboard_entries)
+    # Broadcast leaderboard update
+    try:
+        lb_data = [{
+            'rank': e.rank,
+            'user': e.user.full_name or e.user.email.split('@')[0],
+            'team_name': e.team.name,
+            'points': float(e.total_points),
+            'prize_inr': round(e.prize_amount / 100, 2),
+        } for e in leaderboard_entries]
+
+        broadcast_leaderboard_update(
+            contest_id=str(contest.id),
+            leaderboard_data=lb_data[:50],
+            total_entries=contest.current_entries,
+        )
+    except Exception:
+        pass
+
     return leaderboard_entries
 
 

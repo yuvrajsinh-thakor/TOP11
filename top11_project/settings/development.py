@@ -20,3 +20,9 @@ LOGGING = {
         'level': 'DEBUG',
     },
 }
+
+# Allow all WebSocket origins in development
+CORS_ALLOW_ALL_ORIGINS = True
+
+# Allow local WebSocket connections
+ALLOWED_HOSTS = ['*']

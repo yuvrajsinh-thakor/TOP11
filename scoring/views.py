@@ -236,6 +236,17 @@ class FinishMatchView(APIView):
         match.status = 'completed'
         match.save()
 
+        # Broadcast match status change
+        from scoring.broadcast import broadcast_match_status
+        try:
+            broadcast_match_status(
+                str(match.id), 'completed',
+                'Match has ended. Final scores are in!'
+            )
+        except Exception:
+            pass
+
+
         # Lock all teams
         from contests.models import UserTeam
         UserTeam.objects.filter(match=match).update(is_locked=True)
